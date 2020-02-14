@@ -2,7 +2,7 @@
 title: "Single-cell RNA-Seq data processing with Seurat"
 output: html_notebook
 ---
-This notebook walks through an example of single-cell RNA-Seq (scRNA-Seq) data processing with [Seurat](https://satijalab.org/seurat/). The data we'll be using, comprising 192 samples across 4 time points of mouse macrophages exposed to Salmonella enterica, are available in the form of raw count matrices under the GEO accession number [GSE65528](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE65528). We'll be using the following libraries.
+This notebook walks through an example of single-cell RNA-Seq (scRNA-Seq) data processing with [Seurat](https://satijalab.org/seurat/). The data we'll be using, comprising 192 samples across 4 time points of mouse macrophages exposed to *Salmonella enterica*, are available in the form of raw count matrices under the GEO accession number [GSE65528](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE65528). The number of cells in this data set is quite small compared to some of the seminal scRNA-Seq data sets that contain many thousands of cells, so the steps below are not very computationally intensive. We'll be using the following libraries.
 ```{r}
 library("Seurat")
 library("tidyr")
@@ -48,10 +48,10 @@ We see that 10 samples have been discarded. Let's proceed by normalizing the dat
 ```{r}
 obj <- NormalizeData(obj)
 ```
-Now, let's find genes that are the most variably expressed across the samples. Focusing on these genes in later analysis like PCA can be helpful.
+Now, let's find genes that are the most variably expressed across the samples. Focusing on these genes in later analysis like PCA can be helpful. By default, the 2,000 most variably expressed genes are selected.
 ```{r}
 obj <- FindVariableFeatures(obj)
-head(VariableFeatures(obj),10)
+head(VariableFeatures(obj), 10)
 ```
 ```{r}
 VariableFeaturePlot(obj)
@@ -72,7 +72,7 @@ ElbowPlot(obj)
 ```
 Heuristically, we can say that perhaps 5 principal components are sufficient for these data. With this knowledge, we can apply UMAP and tSNE, two non-linear dimensionality reduction techniques, to the data.
 ```{r}
-obj <- RunUMAP(obj, dims=1:5, umap.method='umap-learn',metric='correlation')
+obj <- RunUMAP(obj, dims=1:5, umap.method="umap-learn", metric="correlation")
 obj <- RunTSNE(obj, dims=1:5)
 ```
 Now, visualize the results.
@@ -82,7 +82,7 @@ DimPlot(obj, reduction = "umap")
 ```{r}
 DimPlot(obj, reduction = "tsne")
 ```
-Let's save the Seurat object so we don't have to redo all these computationally somewhat intensive steps next time.
+Let's save the Seurat object so we don't have to rerun all of the above steps later. Use ```readRDS()``` to reload the Seurat object next time.
 ```{r}
 saveRDS(obj, file = "sc_test.rds")
 ```
