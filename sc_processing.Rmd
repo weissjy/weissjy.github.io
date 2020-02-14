@@ -1,0 +1,94 @@
+---
+title: "Single-cell RNA-Seq data processing with Seurat"
+output: html_notebook
+---
+This notebook walks through an example of single-cell RNA-Seq (scRNA-Seq) data processing with [Seurat](https://satijalab.org/seurat/). The data we'll be using, comprising 192 samples across 4 time points of mouse macrophages exposed to Salmonella enterica, are available in the form of raw count matrices under the GEO accession number [GSE65528](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE65528). We'll be using the following libraries.
+```{r}
+library("Seurat")
+library("tidyr")
+```
+First, we'll import the raw (unlogged and unnormalized) count data. These should be in a matrix where rows are labeled with gene IDs and columns with sample names. Note that for identical headers in the imported counts, R automatically assigns distinguishing suffixes (.1, .2, etc.).
+```{r}
+counts <- read.csv(file="counts.csv", row.names=1)
+head(counts[,0:3])
+```
+The next step will vary according to the way the samples are named. The file imported in this example contains a consistent naming scheme, allowing us to create a DataFrame containing relevant information (here, timepoint and fluorescent labelling data) about each sample. Having this information in such a format will simplify creating the Seurat object. Consider your particular sample naming scheme for best results here.
+```{r}
+snames <- colnames(counts)
+metadata <- read.table(text = snames, sep = "_", as.is = TRUE)
+metadata$V3 <- substr(metadata$V3,1,6)
+metadata <- unite(metadata,label,c(V2,V3),remove=TRUE)
+names(metadata)[1] <- "T"
+
+head(metadata)
+```
+Now, we can create the Seurat object containing the data. The ```project``` argument should contain a name for the project. See the documentation for ```CreateSeuratObject()``` to determine what settings for ```names.field``` and ```names.delim``` should be used. This depends on the way the samples are named and on what aspect of the samples is desired to be compared later. The settings used here assign the timepoint of each sample to its 'label.' The ```cluster``` attribute is assigned here as the fluorescent label corresponding to each cell. Use ```Idents(obj)``` to see if the identities are as desired.
+```{r}
+obj <- CreateSeuratObject(counts, project = "sc_test", assay="RNA",names.field=1,names.delim="_")
+obj$sample <- snames
+obj$cluster <- metadata$label
+
+obj
+head(Idents(obj))
+```
+Next, we'll do some quality control on the data and filter out low-quality samples. We can start by first plotting some relevant features of the data.
+```{r}
+FeatureScatter(obj, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+```
+We can also do two violin plots of the individual attributes.
+```{r}
+VlnPlot(obj, features = c("nFeature_RNA", "nCount_RNA"), ncol = 2)
+```
+We decide to keep samples for which ```nFeature_RNA``` is above 2,500 and ```nCount_RNA``` is above 500,000.
+```{r}
+obj <- subset(obj, subset = nFeature_RNA > 2500 & nCount_RNA > 500000)
+obj
+```
+We see that 10 samples have been discarded. Let's proceed by normalizing the data using the default parameters.
+```{r}
+obj <- NormalizeData(obj)
+```
+Now, let's find genes that are the most variably expressed across the samples. Focusing on these genes in later analysis like PCA can be helpful.
+```{r}
+obj <- FindVariableFeatures(obj)
+head(VariableFeatures(obj),10)
+```
+```{r}
+VariableFeaturePlot(obj)
+```
+Next, before applying dimensionality reduction techniques like PCA and t-SNE, we need to scale the data. This involves, for each gene across all cells, mean-centering the expression values and then scaling the variance of the shifted expression values to 1.
+```{r}
+all.genes <- rownames(obj)
+obj <- ScaleData(obj, features = all.genes)
+```
+Now, we can do PCA on the scaled data, and then visualize the results. Additional ways to visualize the PCA results are ```VizDimLoadings()``` and ```DimHeatmap()```. 
+```{r}
+obj <- RunPCA(obj, features = VariableFeatures(obj), verbose=FALSE)
+DimPlot(obj, reduction = "pca")
+```
+To estimate the 'dimensionality' of our data for later analyses, we can look at an elbow plot, which shows the proportion of variance explained by each successive principal component.
+```{r}
+ElbowPlot(obj)
+```
+Heuristically, we can say that perhaps 5 principal components are sufficient for these data. With this knowledge, we can apply UMAP and tSNE, two non-linear dimensionality reduction techniques, to the data.
+```{r}
+obj <- RunUMAP(obj, dims=1:5, umap.method='umap-learn',metric='correlation')
+obj <- RunTSNE(obj, dims=1:5)
+```
+Now, visualize the results.
+```{r}
+DimPlot(obj, reduction = "umap")
+```
+```{r}
+DimPlot(obj, reduction = "tsne")
+```
+Let's save the Seurat object so we don't have to redo all these computationally somewhat intensive steps next time.
+```{r}
+saveRDS(obj, file = "sc_test.rds")
+```
+At this point, we are ready to apply a variety of further tests and visualization techniques to our data. For instance, to visualize our data in an interactive, user-friendly environment, we can use [Cerebro](https://github.com/romanhaa/Cerebro), which allows exporting Seurat objects into Cerebro-readable files using ```exportFromSeurat()```. Cerebro also offers the possiblity of detecting enriched pathways and gene sets with ```getMarkerGenes()```, ```getEnrichedPathways()```, and ```performGeneSetEnrichmentAnalysis()```.
+
+ To perform differential expression analyses, we can use built-in Seurat functions like ```FindMarkers()```, referring to the helpful [vignette](https://satijalab.org/seurat/v3.1/de_vignette.html) provided by the creators of Seurat. If we simply want to extract the matrix of processed count data, we can do the following.
+```{r}
+write.csv(obj[["RNA"]]@data, file = "sc_processed_data.csv")
+```
